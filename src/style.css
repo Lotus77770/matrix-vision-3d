@@ -1,0 +1,476 @@
+/* ============================================================
+   视觉令牌：界面颜色值统一收敛于此，样式规则中一律用 var() 引用
+   ============================================================ */
+:root {
+  /* 底色与文字 */
+  --color-bg: #000;
+  --color-text-strong: #fff;
+  --color-text: #eaeaea;
+  --color-text-secondary: rgba(255, 255, 255, 0.7);
+  --color-text-muted: rgba(255, 255, 255, 0.55);
+  --color-text-subtle: rgba(255, 255, 255, 0.5);
+
+  /* 面板表面（由深到浅） */
+  --color-surface: rgba(255, 255, 255, 0.04);
+  --color-surface-raised: rgba(255, 255, 255, 0.06);
+  --color-surface-hover: rgba(255, 255, 255, 0.08);
+  --color-surface-active: rgba(255, 255, 255, 0.14);
+  --color-surface-strong: rgba(255, 255, 255, 0.16);
+  --color-field: rgba(0, 0, 0, 0.45);
+
+  /* 描边与分隔线 */
+  --color-border: rgba(255, 255, 255, 0.12);
+  --color-border-field: rgba(255, 255, 255, 0.18);
+  --color-border-strong: rgba(255, 255, 255, 0.2);
+  --color-border-tooltip: rgba(255, 255, 255, 0.28);
+  --color-divider: rgba(255, 255, 255, 0.1);
+
+  /* 主题蓝（accent） */
+  --color-accent: #4d9dff;
+  --color-accent-border: rgba(120, 180, 255, 0.7);
+  --color-accent-focus: rgba(120, 180, 255, 0.8);
+  --color-accent-line: rgba(120, 180, 255, 0.85);
+  --color-accent-line-strong: rgba(120, 180, 255, 0.9);
+  --color-accent-track: rgba(77, 157, 255, 0.85);
+
+  /* 开关滑块与提示气泡 */
+  --color-thumb-off: #cfcfcf;
+  --color-thumb-on: #fff;
+  --color-tooltip-bg: rgba(0, 0, 0, 0.78);
+
+  /* 危险操作（删除） */
+  --color-danger-bg: rgba(255, 80, 80, 0.22);
+  --color-danger-border: rgba(255, 90, 90, 0.7);
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--color-bg);
+  font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+  color: var(--color-text);
+}
+
+/* ============================================================
+   3D 视口：内部 canvas 铺满全屏场景
+   ============================================================ */
+#viewport {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+#viewport canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* ============================================================
+   线性变换控制台：浮在场景之上的固定面板（左上角）
+   ============================================================ */
+#console {
+  position: absolute;
+  top: 24px;
+  left: 24px;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+/* 收缩按钮：折叠指示图标（«/» 随状态翻转），始终可见；点击折叠/展开整个控制台 */
+#console-toggle {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-radius: 12px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+#console-toggle:hover {
+  background: var(--color-surface-active);
+  border-color: var(--color-accent-border);
+  color: var(--color-text-strong);
+}
+
+#console-toggle:focus-visible {
+  outline: 2px solid var(--color-accent-focus);
+  outline-offset: 2px;
+}
+
+#console-toggle svg {
+  display: block;
+}
+
+/* 折叠方向指示：收起时 « 翻转 180° 变为 »，给出明确的收缩/展开暗示 */
+#console-toggle .chev {
+  flex: none;
+  transition: transform 0.2s ease;
+}
+
+#console.collapsed #console-toggle .chev {
+  transform: rotate(180deg);
+}
+
+/* 折叠状态：隐藏卡片，仅留下折叠按钮 */
+#console.collapsed #console-card {
+  display: none;
+}
+
+#console-card {
+  width: 340px;
+  padding: 22px;
+  box-sizing: border-box;
+  border-radius: 16px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  max-height: calc(100vh - 98px);
+  overflow-y: auto;
+  /* 滚动条透明：保留滚动能力，但不显示不透明的状态条 */
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+#console-card::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+#console-card::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+#console-card::-webkit-scrollbar-thumb {
+  background: transparent;
+}
+
+#console-card h1 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+#console-card .subtitle {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--color-text-subtle);
+}
+
+/* 矩阵网格：3×3 元素，每格「输入框 + 滑块」 */
+.matrix {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px 8px;
+  margin-top: 16px;
+}
+
+.cell {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cell input[type="number"] {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 4px;
+  border-radius: 8px;
+  border: 1px solid var(--color-border-field);
+  background: var(--color-field);
+  color: var(--color-text-strong);
+  font: 14px/1.2 inherit;
+  text-align: center;
+  -moz-appearance: textfield;
+}
+
+.cell input[type="number"]::-webkit-outer-spin-button,
+.cell input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.cell input[type="number"]:focus {
+  outline: none;
+  border-color: var(--color-accent-line);
+}
+
+.cell input[type="range"] {
+  width: 100%;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--color-accent);
+  cursor: pointer;
+}
+
+.matrix-actions {
+  margin-top: 18px;
+}
+
+#reset-btn {
+  width: 100%;
+  padding: 9px 12px;
+  border-radius: 9px;
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-surface-hover);
+  color: var(--color-text);
+  font: 14px/1 inherit;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+#reset-btn:hover {
+  background: var(--color-surface-strong);
+  border-color: var(--color-accent-border);
+}
+
+/* 网格线显示开关（X / Y / Z 三组） */
+.grid-toggles {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--color-divider);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.grid-toggles-title {
+  font-size: 12px;
+  letter-spacing: 0.5px;
+  color: var(--color-text-subtle);
+}
+
+.grid-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--color-text);
+  cursor: pointer;
+  user-select: none;
+}
+
+/* 隐藏原生复选框，用 track + thumb 自绘开关 */
+.grid-toggle input {
+  position: absolute;
+  width: 0;
+  height: 0;
+  opacity: 0;
+}
+
+.grid-toggle .track {
+  position: relative;
+  flex: none;
+  width: 38px;
+  height: 20px;
+  border-radius: 999px;
+  background: var(--color-surface-active);
+  border: 1px solid var(--color-border-strong);
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.grid-toggle .thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--color-thumb-off);
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.grid-toggle input:checked + .track {
+  background: var(--color-accent-track);
+  border-color: var(--color-accent-line-strong);
+}
+
+.grid-toggle input:checked + .track .thumb {
+  transform: translateX(18px);
+  background: var(--color-thumb-on);
+}
+
+.grid-toggle input:focus-visible + .track {
+  outline: 2px solid var(--color-accent-focus);
+  outline-offset: 2px;
+}
+
+/* 向量列表：添加 / 删除 / 修改坐标 / 设置颜色 */
+.vector-section {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--color-divider);
+}
+
+.vector-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.vector-section-title {
+  font-size: 12px;
+  letter-spacing: 0.5px;
+  color: var(--color-text-subtle);
+}
+
+#add-vector-btn {
+  padding: 5px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-surface-hover);
+  color: var(--color-text);
+  font: 12px/1 inherit;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+#add-vector-btn:hover {
+  background: var(--color-surface-strong);
+  border-color: var(--color-accent-border);
+}
+
+.vector-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.vector-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.vector-color {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 7px;
+  background: none;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.vector-color::-webkit-color-swatch-wrapper {
+  padding: 2px;
+}
+
+.vector-color::-webkit-color-swatch {
+  border: none;
+  border-radius: 5px;
+}
+
+.vector-coords {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+}
+
+.vector-coord {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 5px 2px;
+  border-radius: 7px;
+  border: 1px solid var(--color-border-field);
+  background: var(--color-field);
+  color: var(--color-text-strong);
+  font: 12px/1.2 inherit;
+  text-align: center;
+  -moz-appearance: textfield;
+}
+
+.vector-coord::-webkit-outer-spin-button,
+.vector-coord::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.vector-coord:focus {
+  outline: none;
+  border-color: var(--color-accent-line);
+}
+
+.vector-del {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border-radius: 7px;
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-surface-raised);
+  color: var(--color-text-secondary);
+  font: 16px/1 inherit;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.vector-del:hover {
+  background: var(--color-danger-bg);
+  border-color: var(--color-danger-border);
+  color: var(--color-text-strong);
+}
+
+/* ============================================================
+   全屏场景：3D 画面铺满整个窗口
+   ============================================================ */
+#stage {
+  position: absolute;
+  inset: 0;
+}
+
+/* ============================================================
+   操作提示（浮在场景左下角）
+   ============================================================ */
+.hint {
+  position: fixed;
+  left: 16px;
+  bottom: 14px;
+  color: var(--color-text-muted);
+  font-size: 13px;
+  line-height: 1.5;
+  letter-spacing: 0.5px;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* ============================================================
+   鼠标悬停基向量时的坐标提示（跟随鼠标）
+   ============================================================ */
+#vector-tooltip {
+  position: fixed;
+  display: none;
+  z-index: 20;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--color-tooltip-bg);
+  border: 1px solid var(--color-border-tooltip);
+  color: var(--color-text-strong);
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: nowrap;
+  pointer-events: none;
+  user-select: none;
+}
