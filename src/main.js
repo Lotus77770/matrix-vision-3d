@@ -587,6 +587,15 @@ consoleToggle.addEventListener('click', () => {
   consoleToggle.setAttribute('aria-expanded', String(!collapsed));
 });
 
+/* 向量列表 / 网格线显示：各自独立的折叠小节，与控制台整体的折叠互不影响 */
+for (const btn of document.querySelectorAll('.section-toggle')) {
+  btn.addEventListener('click', () => {
+    const section = btn.closest('.collapsible');
+    const collapsed = section.classList.toggle('collapsed');
+    btn.setAttribute('aria-expanded', String(!collapsed));
+  });
+}
+
 /* ============================================================
    向量列表 UI：添加 / 删除 / 修改坐标 / 设置颜色
    每行 = 颜色选择器 + x/y/z 坐标输入 + 删除按钮

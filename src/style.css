@@ -139,6 +139,9 @@ body {
   border: 1px solid var(--color-border);
   max-height: calc(100vh - 98px);
   overflow-y: auto;
+  /* 滚动条占位恒定：展开/收起小节导致内容高度跨越 max-height 时，
+     滚动条出现/消失不再挤压内容宽度（消除左右缩放抖动） */
+  scrollbar-gutter: stable;
   /* 滚动条透明：保留滚动能力，但不显示不透明的状态条 */
   scrollbar-width: thin;
   scrollbar-color: transparent transparent;
@@ -162,13 +165,6 @@ body {
   font-size: 18px;
   font-weight: 600;
   letter-spacing: 0.5px;
-}
-
-#console-card .subtitle {
-  margin: 8px 0 0;
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--color-text-subtle);
 }
 
 /* 矩阵网格：3×3 元素，每格「输入框 + 滑块」 */
@@ -238,20 +234,59 @@ body {
   border-color: var(--color-accent-border);
 }
 
+/* 可折叠小节（向量列表 / 网格线显示）：标题行即开关，点击展开 / 收起 */
+.section-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--color-text-subtle);
+  font: 12px/1 inherit;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  user-select: none;
+  transition: color 0.15s ease;
+}
+
+.section-toggle:hover {
+  color: var(--color-text-strong);
+}
+
+.section-toggle:focus-visible {
+  outline: 2px solid var(--color-accent-focus);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.section-toggle .chev {
+  flex: none;
+  transition: transform 0.2s ease;
+}
+
+/* 收起后箭头转向右侧 */
+.collapsible.collapsed .section-toggle .chev {
+  transform: rotate(-90deg);
+}
+
+.collapsible.collapsed .section-body {
+  display: none;
+}
+
+.section-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+}
+
 /* 网格线显示开关（X / Y / Z 三组） */
 .grid-toggles {
   margin-top: 16px;
   padding-top: 14px;
   border-top: 1px solid var(--color-divider);
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.grid-toggles-title {
-  font-size: 12px;
-  letter-spacing: 0.5px;
-  color: var(--color-text-subtle);
 }
 
 .grid-toggle {
@@ -314,20 +349,6 @@ body {
   margin-top: 16px;
   padding-top: 14px;
   border-top: 1px solid var(--color-divider);
-}
-
-.vector-section-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 10px;
-}
-
-.vector-section-title {
-  font-size: 12px;
-  letter-spacing: 0.5px;
-  color: var(--color-text-subtle);
 }
 
 #add-vector-btn {

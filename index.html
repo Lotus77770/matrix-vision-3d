@@ -12,13 +12,13 @@
     <!-- 唯一的 3D 视口（内含 canvas），始终位于场景中 -->
     <div id="viewport"></div>
 
-    <!-- 线性变换控制台：浮在场景之上的固定面板（左上角），可收缩为一个折叠按钮 -->
-    <div id="console">
+    <!-- 线性变换控制台：浮在场景之上的固定面板（左上角），默认收起为一个折叠按钮 -->
+    <div id="console" class="collapsed">
       <button
         id="console-toggle"
         type="button"
         title="展开 / 收起控制台"
-        aria-expanded="true"
+        aria-expanded="false"
         aria-controls="console-card"
       >
         <!-- 折叠方向指示：展开时为 «（收起），收起后旋转 180° 变为 »（展开） -->
@@ -40,35 +40,79 @@
       </button>
       <section id="console-card">
         <h1>线性变换控制台</h1>
-        <p class="subtitle">调节 3×3 矩阵，实时作用于基向量与立方格阵</p>
         <div id="matrix" class="matrix"></div>
         <div class="matrix-actions">
           <button id="reset-btn" type="button">重置为单位矩阵</button>
         </div>
-        <div class="grid-toggles">
-          <span class="grid-toggles-title">网格线显示</span>
-          <label class="grid-toggle">
-            <input type="checkbox" data-grid-axis="x" checked />
-            <span class="track"><span class="thumb"></span></span>
-            <span class="name">X 向网格线</span>
-          </label>
-          <label class="grid-toggle">
-            <input type="checkbox" data-grid-axis="y" checked />
-            <span class="track"><span class="thumb"></span></span>
-            <span class="name">Y 向网格线</span>
-          </label>
-          <label class="grid-toggle">
-            <input type="checkbox" data-grid-axis="z" checked />
-            <span class="track"><span class="thumb"></span></span>
-            <span class="name">Z 向网格线</span>
-          </label>
-        </div>
-        <div class="vector-section">
-          <div class="vector-section-head">
-            <span class="vector-section-title">向量列表</span>
+        <div class="vector-section collapsible collapsed">
+          <button
+            class="section-toggle"
+            type="button"
+            aria-expanded="false"
+            aria-controls="vector-section-body"
+          >
+            <span class="section-toggle-title">向量列表</span>
+            <!-- 展开时箭头朝下，收起后转向右侧 -->
+            <svg
+              class="chev"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <polyline points="6,9 12,15 18,9" />
+            </svg>
+          </button>
+          <div class="section-body" id="vector-section-body">
             <button id="add-vector-btn" type="button">添加向量</button>
+            <div id="vector-list" class="vector-list"></div>
           </div>
-          <div id="vector-list" class="vector-list"></div>
+        </div>
+        <div class="grid-toggles collapsible collapsed">
+          <button
+            class="section-toggle"
+            type="button"
+            aria-expanded="false"
+            aria-controls="grid-section-body"
+          >
+            <span class="section-toggle-title">网格线显示</span>
+            <svg
+              class="chev"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <polyline points="6,9 12,15 18,9" />
+            </svg>
+          </button>
+          <div class="section-body" id="grid-section-body">
+            <label class="grid-toggle">
+              <input type="checkbox" data-grid-axis="x" checked />
+              <span class="track"><span class="thumb"></span></span>
+              <span class="name">X 向网格线</span>
+            </label>
+            <label class="grid-toggle">
+              <input type="checkbox" data-grid-axis="y" checked />
+              <span class="track"><span class="thumb"></span></span>
+              <span class="name">Y 向网格线</span>
+            </label>
+            <label class="grid-toggle">
+              <input type="checkbox" data-grid-axis="z" checked />
+              <span class="track"><span class="thumb"></span></span>
+              <span class="name">Z 向网格线</span>
+            </label>
+          </div>
         </div>
       </section>
     </div>
