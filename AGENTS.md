@@ -9,9 +9,20 @@
 ```bash
 npm install
 npm run dev       # 开发服务器 + HMR
-npm run build     # 产出自包含单文件 dist/index.html（约 563 KB）
+npm run build     # 产出自包含单文件 dist/index.html
 npm run preview   # 本地预览构建产物（默认 http://localhost:4173）
 ```
+
+## 修改与验收流程
+
+- 小改动可直接实现；跨模块、交互或 3D 行为改动，先用不超过 8 行列出：目标、涉及文件、必须保持的行为、明确不做的修改、验收方式。
+- 开始修改前阅读相关源码及本文件中与任务有关的约束；存在歧义时先询问。
+- 实现只覆盖当前任务，不顺手重构、不增加无关功能或依赖。
+- 完成后检查实际 diff，确认没有越界修改，并逐项核对本次涉及的约定。
+- 至少运行 `npm run build`；涉及界面或交互时，进行针对性的浏览器验证。
+- 完成说明必须区分「已运行并通过」「未验证」；不得把静态推测说成测试通过。
+- 功能、修复或显著行为变更完成后，提交前将变更写入 [CHANGELOG.md](./CHANGELOG.md) 的 `[Unreleased]`，按 Added / Changed / Fixed / Removed 分类；纯文档或内部流程调整可不记录。
+- 只有功能行为、命令或项目约定确实变化时，才同步 README 和需求文档。
 
 ## 代码与样式约定
 
@@ -45,4 +56,12 @@ npm run preview   # 本地预览构建产物（默认 http://localhost:4173）
 
 ## 提交规范
 
-Conventional Commits，例如 `feat: ...` / `fix: ...` / `docs: ...` / `chore: ...`。
+提交信息使用 Conventional Commits，例如 `feat: ...` / `fix: ...` / `docs: ...` / `chore: ...`。
+
+提交流程：
+
+1. 仅在用户要求时创建提交；提交前运行 `git status`、`git diff` 和 `git log`，确认修改范围、验证结果及仓库提交风格，并检查应记录的改动已写入 [CHANGELOG.md](./CHANGELOG.md)。
+2. 只暂存本次任务相关文件，不使用 `git add -A` 或 `git add .`；不要纳入未跟踪的参考资料、生成物或无关改动。
+3. 提交信息简明说明改动及其目的；有未完成的验证时，在提交后的说明中明确列出。
+4. 除非用户明确要求，不修改既有提交、不跳过钩子、不推送远端。
+5. 提交后运行 `git status`，确认提交成功并报告仍保留的未提交文件。

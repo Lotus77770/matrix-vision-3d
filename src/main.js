@@ -13,6 +13,8 @@ const CONFIG = {
   axisThickness: 0.012, // 坐标轴圆柱半径
   axisLabelOffset: 0.5, // 轴端标签相对轴端点的外移距离
   axisLabelScale: 0.9, // 轴端标签精灵的边长（世界单位）
+  axisLabelCanvasSize: 128, // 轴端标签画布边长（像素）
+  axisLabelFontSize: 84, // 轴端标签字号（像素）
   vectorShaftRadius: 0.045, // 基向量杆半径（粗大醒目）
   vectorHeadRadius: 0.095, // 基向量箭头底部半径
   vectorHeadHeight: 0.22, // 基向量箭头高度
@@ -20,11 +22,37 @@ const CONFIG = {
   matrixMin: -3, // 矩阵元素取值范围下限
   matrixMax: 3, // 矩阵元素取值范围上限
   matrixStep: 0.1, // 矩阵元素步进
+  camera: {
+    fov: 50,
+    near: 0.1,
+    far: 500,
+  },
+  lights: {
+    ambient: { color: 0xffffff, intensity: 0.75 },
+    key: { color: 0xffffff, intensity: 1.0, position: [6, 10, 8] },
+    fill: { color: 0xffffff, intensity: 0.35, position: [-8, -6, -7] },
+  },
+  segments: {
+    axis: 12, // 坐标轴圆柱的径向细分
+    tick: 8, // 刻度圆柱的径向细分
+    vectorShaft: 24, // 向量杆圆柱的径向细分
+    vectorHead: 28, // 向量锥的径向细分
+  },
+  controls: {
+    minRadius: 1.5,
+    maxRadius: 60,
+    rotateSpeed: 0.006,
+    zoomSpeed: 0.0015,
+    moveSpeed: 3.5, // 单位 / 秒
+    phiMargin: 0.05, // 极角与上下极点的最小间距
+  },
   color: {
     background: 0x000000,
     axis: 0xffffff, // 坐标轴：白色
     tick: 0xffffff, // 整数刻度：白色
     grid: 0x3a3a3a, // 网格：暗灰，作为背景参考
+    vectorDefaults: ['#ff4d4d', '#4dff88', '#4d9dff'], // 三个基向量 e₁ / e₂ / e₃ 的默认颜色
+    vectorPalette: ['#ff4d4d', '#4dff88', '#4d9dff', '#ffd54d', '#ff4dff', '#4dffff', '#ff9d4d'], // 新增向量依次取用的颜色
   },
 };
 
@@ -34,7 +62,6 @@ const CONFIG = {
    控制台只是浮在场景之上的面板，故始终只有一个画布、一台相机。
    ============================================================ */
 const viewport = document.querySelector('#viewport');
-const stage = document.querySelector('#stage');
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -43,15 +70,23 @@ viewport.appendChild(renderer.domElement);
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(CONFIG.color.background);
 
-const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 500);
+const camera = new THREE.PerspectiveCamera(
+  CONFIG.camera.fov,
+  1,
+  CONFIG.camera.near,
+  CONFIG.camera.far
+);
 
 /* 灯光：让基向量的实体几何体有明暗立体感 */
-scene.add(new THREE.AmbientLight(0xffffff, 0.75));
-const keyLight = new THREE.DirectionalLight(0xffffff, 1.0);
-keyLight.position.set(6, 10, 8);
+scene.add(new THREE.AmbientLight(CONFIG.lights.ambient.color, CONFIG.lights.ambient.intensity));
+const keyLight = new THREE.DirectionalLight(CONFIG.lights.key.color, CONFIG.lights.key.intensity);
+keyLight.position.set(...CONFIG.lights.key.position);
 scene.add(keyLight);
-const fillLight = new THREE.DirectionalLight(0xffffff, 0.35);
-fillLight.position.set(-8, -6, -7);
+const fillLight = new THREE.DirectionalLight(
+  CONFIG.lights.fill.color,
+  CONFIG.lights.fill.intensity
+);
+fillLight.position.set(...CONFIG.lights.fill.position);
 scene.add(fillLight);
 
 /* ============================================================
@@ -59,13 +94,13 @@ scene.add(fillLight);
    ============================================================ */
 /* 用 Canvas 画文字生成 Sprite 标签，使其始终正对相机、便于阅读 */
 function makeAxisLabelSprite(text) {
-  const px = 128;
+  const px = CONFIG.axisLabelCanvasSize;
   const canvas = document.createElement('canvas');
   canvas.width = px;
   canvas.height = px;
   const ctx = canvas.getContext('2d');
-  ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 84px -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif';
+  ctx.fillStyle = `#${CONFIG.color.axis.toString(16).padStart(6, '0')}`;
+  ctx.font = `bold ${CONFIG.axisLabelFontSize}px -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(text, px / 2, px / 2);
@@ -97,7 +132,7 @@ function createAxes() {
         CONFIG.axisThickness,
         CONFIG.axisThickness,
         half * 2,
-        12
+        CONFIG.segments.axis
       ),
       material
     );
@@ -112,7 +147,7 @@ function createAxes() {
     CONFIG.tickThickness,
     CONFIG.tickThickness,
     CONFIG.tickLength,
-    8
+    CONFIG.segments.tick
   );
   const tickGeoAlongX = tickGeoAlongY.clone();
   tickGeoAlongX.rotateZ(-Math.PI / 2);
@@ -215,14 +250,14 @@ function createVectorArrow(color) {
       CONFIG.vectorShaftRadius,
       CONFIG.vectorShaftRadius,
       shaftLength,
-      24
+      CONFIG.segments.vectorShaft
     ),
     material
   );
   shaft.position.y = shaftLength / 2;
 
   const head = new THREE.Mesh(
-    new THREE.ConeGeometry(CONFIG.vectorHeadRadius, CONFIG.vectorHeadHeight, 28),
+    new THREE.ConeGeometry(CONFIG.vectorHeadRadius, CONFIG.vectorHeadHeight, CONFIG.segments.vectorHead),
     material
   );
   head.position.y = shaftLength + CONFIG.vectorHeadHeight / 2;
@@ -248,11 +283,11 @@ function updateArrow(group, w) {
   group.updateMatrixWorld(true);
 }
 
-// 默认向量即三个基向量
+// 默认向量即三个基向量（颜色取自 CONFIG.color.vectorDefaults）
 const DEFAULT_VECTORS = [
-  { coord: [1, 0, 0], color: '#ff4d4d' },
-  { coord: [0, 1, 0], color: '#4dff88' },
-  { coord: [0, 0, 1], color: '#4d9dff' },
+  { coord: [1, 0, 0], color: CONFIG.color.vectorDefaults[0] },
+  { coord: [0, 1, 0], color: CONFIG.color.vectorDefaults[1] },
+  { coord: [0, 0, 1], color: CONFIG.color.vectorDefaults[2] },
 ];
 
 // 每项：{ id, coord: [x, y, z], color, arrow, world }
@@ -277,7 +312,7 @@ DEFAULT_VECTORS.forEach((def) => addVector(def.coord, def.color));
    - 向量列表：每个向量 v 都渲染为指向 M·v 的箭头，保持箭头模型本身不被剪切/压扁
    - 网格：所有顶点按 M·v 变换（整体拉伸/剪切）
    ============================================================ */
-const identityMatrix = new THREE.Matrix3();
+const IDENTITY_MAT3 = new THREE.Matrix3();
 
 function applyMatrix(m3) {
   const e = m3.elements; // 列主序
@@ -310,7 +345,7 @@ function applyMatrix(m3) {
   }
 }
 
-applyMatrix(identityMatrix);
+applyMatrix(IDENTITY_MAT3);
 
 /* ============================================================
    视角控制器
@@ -336,11 +371,11 @@ class ViewController {
     this.theta = DEFAULT_VIEW.theta; // 方位角
     this.phi = DEFAULT_VIEW.phi; // 极角（自 +Y 起算）
 
-    this.minRadius = 1.5;
-    this.maxRadius = 60;
-    this.rotateSpeed = 0.006;
-    this.zoomSpeed = 0.0015;
-    this.moveSpeed = 3.5; // 单位 / 秒
+    this.minRadius = CONFIG.controls.minRadius;
+    this.maxRadius = CONFIG.controls.maxRadius;
+    this.rotateSpeed = CONFIG.controls.rotateSpeed;
+    this.zoomSpeed = CONFIG.controls.zoomSpeed;
+    this.moveSpeed = CONFIG.controls.moveSpeed;
 
     this.enabled = true;
     this.pressedKeys = new Set();
@@ -380,8 +415,8 @@ class ViewController {
       this.theta -= dx * this.rotateSpeed;
       this.phi = THREE.MathUtils.clamp(
         this.phi - dy * this.rotateSpeed,
-        0.05,
-        Math.PI - 0.05
+        CONFIG.controls.phiMargin,
+        Math.PI - CONFIG.controls.phiMargin
       );
     });
 
@@ -462,12 +497,12 @@ const controller = new ViewController(camera, renderer.domElement);
    矩阵按数学行主序存储：matrixValues[行][列]，默认单位矩阵。
    任一元素变化 → 立即重建矩阵并调用 applyMatrix（实时联动）。
    ============================================================ */
-const identity = [
+const IDENTITY_VALUES = [
   [1, 0, 0],
   [0, 1, 0],
   [0, 0, 1],
 ];
-const matrixValues = identity.map((row) => row.slice());
+const matrixValues = IDENTITY_VALUES.map((row) => row.slice());
 
 const matrixRoot = document.querySelector('#matrix');
 const resetBtn = document.querySelector('#reset-btn');
@@ -531,6 +566,11 @@ function buildMatrixUI() {
         apply(parsed, 'number');
       });
 
+      // 清空后失焦仍为空：回填当前内部值，保证界面与实际矩阵一致
+      num.addEventListener('change', () => {
+        if (Number.isNaN(parseFloat(num.value))) num.value = String(matrixValues[r][c]);
+      });
+
       rng.addEventListener('input', () => {
         apply(parseFloat(rng.value), 'range');
       });
@@ -545,10 +585,10 @@ function buildMatrixUI() {
 function resetMatrix() {
   for (let r = 0; r < 3; r++) {
     for (let c = 0; c < 3; c++) {
-      matrixValues[r][c] = identity[r][c];
+      matrixValues[r][c] = IDENTITY_VALUES[r][c];
       const cell = matrixCells[r * 3 + c];
-      cell.num.value = String(identity[r][c]);
-      cell.rng.value = String(identity[r][c]);
+      cell.num.value = String(IDENTITY_VALUES[r][c]);
+      cell.rng.value = String(IDENTITY_VALUES[r][c]);
     }
   }
   syncMatrix();
@@ -602,8 +642,6 @@ for (const btn of document.querySelectorAll('.section-toggle')) {
    ============================================================ */
 const vectorListRoot = document.querySelector('#vector-list');
 const addVectorBtn = document.querySelector('#add-vector-btn');
-// 新增向量时依次取用的颜色，避免与原向量混淆
-const VECTOR_PALETTE = ['#ff4d4d', '#4dff88', '#4d9dff', '#ffd54d', '#ff4dff', '#4dffff', '#ff9d4d'];
 
 function buildVectorRow(entry) {
   const row = document.createElement('div');
@@ -638,6 +676,11 @@ function buildVectorRow(entry) {
       entry.coord[i] = parsed;
       syncMatrix(); // 坐标变化 → 立即重算 M·v
     });
+
+    // 清空后失焦仍为空：回填当前内部值，保证界面与实际坐标一致
+    num.addEventListener('change', () => {
+      if (Number.isNaN(parseFloat(num.value))) num.value = String(entry.coord[i]);
+    });
     coords.appendChild(num);
   });
 
@@ -649,6 +692,11 @@ function buildVectorRow(entry) {
   del.title = '删除该向量';
   del.addEventListener('click', () => {
     scene.remove(entry.arrow);
+    // 释放该箭头独占的几何体与材质，避免反复增删向量造成 GPU 资源泄漏
+    entry.arrow.traverse((obj) => {
+      if (obj.isMesh) obj.geometry.dispose();
+    });
+    entry.arrow.userData.material.dispose();
     const idx = vectorList.indexOf(entry);
     if (idx >= 0) vectorList.splice(idx, 1);
     row.remove();
@@ -663,7 +711,9 @@ function buildVectorRow(entry) {
 vectorList.forEach(buildVectorRow);
 
 addVectorBtn.addEventListener('click', () => {
-  const color = VECTOR_PALETTE[vectorIdSeq % VECTOR_PALETTE.length];
+  // 新增向量依次取用调色板颜色，避免与已有向量混淆
+  const palette = CONFIG.color.vectorPalette;
+  const color = palette[vectorIdSeq % palette.length];
   const entry = addVector([1, 1, 1], color); // 新向量给一个明显可见的默认坐标
   buildVectorRow(entry);
   syncMatrix(); // 立即按当前矩阵变换
@@ -742,8 +792,7 @@ function animate(now) {
   renderer.render(scene, camera);
 }
 
-/* 场景常驻：把视口放进全屏场景，直接开始渲染 */
-stage.appendChild(viewport);
+/* 场景常驻：直接开始渲染 */
 resize();
 requestAnimationFrame(animate);
 

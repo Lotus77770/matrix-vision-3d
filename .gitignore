@@ -3,6 +3,7 @@ node_modules/
 
 # 构建产物
 dist/
+.trae-html-share-packages/
 
 # 日志
 *.log

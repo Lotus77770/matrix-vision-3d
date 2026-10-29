@@ -24,7 +24,7 @@ npm install
 npm run build
 ```
 
-产物为 `dist/index.html`（约 563 KB，JS / CSS 已全部内联）。
+产物为 `dist/index.html`（JS / CSS 已全部内联）。
 
 ### 方式三：本地开发
 
