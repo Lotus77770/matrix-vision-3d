@@ -46,6 +46,10 @@ const CONFIG = {
     moveSpeed: 3.5, // 单位 / 秒
     phiMargin: 0.05, // 极角与上下极点的最小间距
   },
+  animation: {
+    duration: 0.9, // 过渡动画默认时长（秒）
+    radiusBumpFactor: 0.25, // 相机飞行中段拉远的幅度（相对角距离的比例）
+  },
   color: {
     background: 0x000000,
     axis: 0xffffff, // 坐标轴：白色
@@ -386,7 +390,7 @@ class ViewController {
     this.update(0);
   }
 
-  // 恢复为初始视角（环绕中心、距离、方位角、极角）
+  // 恢复为初始视角（环绕中心、距离、方位角、极角）——瞬时版，供初始构造与调试使用
   resetView() {
     this.target.copy(DEFAULT_VIEW.target);
     this.radius = DEFAULT_VIEW.radius;
@@ -394,6 +398,42 @@ class ViewController {
     this.phi = DEFAULT_VIEW.phi;
     this.pressedKeys.clear();
     this.update(0);
+  }
+
+  // 平滑飞往指定视角：插值球面参数而非相机坐标，相机绕目标走出弧线而非直线。
+  // theta 取最短角路径（处理 2π 回绕）；半径在中段先微微拉远再落位（幅度随角
+  // 距离增大，封顶 π），产生"拉远—俯冲落位"的运镜感。返回 Promise，落位时 resolve。
+  animateTo(view, { duration = CONFIG.animation.duration } = {}) {
+    const startTarget = this.target.clone();
+    const startRadius = this.radius;
+    const startTheta = this.theta;
+    const startPhi = this.phi;
+
+    let dTheta = (view.theta - startTheta) % (Math.PI * 2);
+    if (dTheta > Math.PI) dTheta -= Math.PI * 2;
+    if (dTheta < -Math.PI) dTheta += Math.PI * 2;
+
+    const angularDist = Math.abs(dTheta) + Math.abs(view.phi - startPhi);
+    const bump = Math.min(angularDist, Math.PI) * CONFIG.animation.radiusBumpFactor;
+
+    return animationManager.run({
+      name: 'cameraTo',
+      duration,
+      onUpdate: (k) => {
+        const arc = Math.sin(k * Math.PI); // 飞行中段为 1，两端为 0
+        this.target.lerpVectors(startTarget, view.target, k);
+        this.radius = THREE.MathUtils.lerp(startRadius, view.radius, k) + arc * bump;
+        this.theta = startTheta + dTheta * k;
+        this.phi = THREE.MathUtils.lerp(startPhi, view.phi, k);
+      },
+      onComplete: () => {
+        // 精确落位：强制写回目标参数，消除插值的浮点误差
+        this.target.copy(view.target);
+        this.radius = view.radius;
+        this.theta = view.theta;
+        this.phi = view.phi;
+      },
+    });
   }
 
   bindEvents() {
@@ -456,22 +496,26 @@ class ViewController {
   }
 
   update(delta) {
-    const forward = new THREE.Vector3()
-      .subVectors(this.target, this.camera.position)
-      .normalize();
-    const right = new THREE.Vector3()
-      .crossVectors(forward, new THREE.Vector3(0, 1, 0))
-      .normalize();
+    // WASD 平移仅在有输入权时生效（动画锁定期间即使按住键也不移动）
+    if (this.enabled) {
+      const forward = new THREE.Vector3()
+        .subVectors(this.target, this.camera.position)
+        .normalize();
+      const right = new THREE.Vector3()
+        .crossVectors(forward, new THREE.Vector3(0, 1, 0))
+        .normalize();
 
-    const move = new THREE.Vector3();
-    if (this.pressedKeys.has('w')) move.add(forward);
-    if (this.pressedKeys.has('s')) move.sub(forward);
-    if (this.pressedKeys.has('d')) move.add(right);
-    if (this.pressedKeys.has('a')) move.sub(right);
-    if (move.lengthSq() > 0) {
-      this.target.addScaledVector(move.normalize(), this.moveSpeed * delta);
+      const move = new THREE.Vector3();
+      if (this.pressedKeys.has('w')) move.add(forward);
+      if (this.pressedKeys.has('s')) move.sub(forward);
+      if (this.pressedKeys.has('d')) move.add(right);
+      if (this.pressedKeys.has('a')) move.sub(right);
+      if (move.lengthSq() > 0) {
+        this.target.addScaledVector(move.normalize(), this.moveSpeed * delta);
+      }
     }
 
+    // 相机位姿始终由球面参数唯一决定（手动控制与动画插值共用这一出口）
     const sinPhi = Math.sin(this.phi);
     this.camera.position.set(
       this.target.x + this.radius * sinPhi * Math.sin(this.theta),
@@ -491,6 +535,68 @@ function isTypingTarget(el) {
 }
 
 const controller = new ViewController(camera, renderer.domElement);
+
+/* ============================================================
+   动画底座 + 输入锁
+   - animationManager：极简补间引擎，挂在渲染循环里逐帧推进；
+     run() 返回 Promise、完成时 resolve，供 AI / MCP 演示 await 串联
+   - inputLock：引用计数式输入锁。动画期间禁止一切用户操作
+     （相机控制 + 控制台全部 UI），所有持有者释放后才恢复
+   ============================================================ */
+const consoleEl = document.querySelector('#console');
+
+// 缓动：起步缓 → 中段快 → 落位缓
+function easeInOutCubic(t) {
+  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+}
+
+const animationManager = {
+  active: new Set(),
+
+  // 启动一个动画：onUpdate 收到缓动后的进度 k ∈ [0,1]，结束帧必为 1
+  run({ name = 'animation', duration = 1, ease = easeInOutCubic, onUpdate, onComplete }) {
+    return new Promise((resolve) => {
+      this.active.add({ name, duration, ease, onUpdate, onComplete, resolve, elapsed: 0 });
+    });
+  },
+
+  // 每帧推进（挂在渲染循环里，dt 为帧间隔秒数）
+  update(dt) {
+    for (const anim of [...this.active]) {
+      anim.elapsed += dt;
+      const progress = Math.min(anim.elapsed / anim.duration, 1);
+      anim.onUpdate(anim.ease(progress));
+      if (progress >= 1) {
+        this.active.delete(anim);
+        if (anim.onComplete) anim.onComplete();
+        anim.resolve();
+      }
+    }
+  },
+};
+
+const inputLock = {
+  count: 0,
+
+  // 上锁：停用相机控制、清空按住的移动键、控制台 UI 整体禁用（连折叠按钮在内）
+  acquire() {
+    this.count++;
+    if (this.count === 1) {
+      controller.enabled = false;
+      controller.pressedKeys.clear();
+      consoleEl.classList.add('input-locked');
+    }
+  },
+
+  // 解锁：所有持有者释放后才恢复
+  release() {
+    this.count = Math.max(this.count - 1, 0);
+    if (this.count === 0) {
+      controller.enabled = true;
+      consoleEl.classList.remove('input-locked');
+    }
+  },
+};
 
 /* ============================================================
    3×3 矩阵控制台
@@ -525,6 +631,44 @@ function syncMatrix() {
     matrixValues[2][2]
   );
   applyMatrix(m);
+}
+
+// 把 matrixValues 同步到 9 组输入控件（显示保留 1 位小数；动画时数字随之"滚动"）
+function syncMatrixUI() {
+  for (let r = 0; r < 3; r++) {
+    for (let c = 0; c < 3; c++) {
+      const v = Math.round(matrixValues[r][c] * 10) / 10;
+      const cell = matrixCells[r * 3 + c];
+      cell.num.value = String(v);
+      cell.rng.value = String(v);
+    }
+  }
+}
+
+// 矩阵数值补间：逐帧插值并走既有 syncMatrix → applyMatrix 联动场景
+function animateMatrixTo(values, { duration = CONFIG.animation.duration } = {}) {
+  const start = matrixValues.map((row) => row.slice());
+  return animationManager.run({
+    name: 'matrixTo',
+    duration,
+    onUpdate: (k) => {
+      for (let r = 0; r < 3; r++) {
+        for (let c = 0; c < 3; c++) {
+          matrixValues[r][c] = THREE.MathUtils.lerp(start[r][c], values[r][c], k);
+        }
+      }
+      syncMatrix();
+      syncMatrixUI();
+    },
+    onComplete: () => {
+      // 精确落位：强制写回精确目标值，消除插值的浮点误差
+      for (let r = 0; r < 3; r++) {
+        for (let c = 0; c < 3; c++) matrixValues[r][c] = values[r][c];
+      }
+      syncMatrix();
+      syncMatrixUI();
+    },
+  });
 }
 
 function buildMatrixUI() {
@@ -582,21 +726,29 @@ function buildMatrixUI() {
   }
 }
 
-function resetMatrix() {
-  for (let r = 0; r < 3; r++) {
-    for (let c = 0; c < 3; c++) {
-      matrixValues[r][c] = IDENTITY_VALUES[r][c];
-      const cell = matrixCells[r * 3 + c];
-      cell.num.value = String(IDENTITY_VALUES[r][c]);
-      cell.rng.value = String(IDENTITY_VALUES[r][c]);
-    }
-  }
-  syncMatrix();
-  controller.resetView(); // 重置矩阵的同时，把视角也恢复为初始视角
+/* —— 动画编排：重置为单位矩阵 —— */
+
+// 播放"重置为单位矩阵"过渡动画：矩阵数值与相机同时平滑归位，期间输入全部锁定
+function playResetAnimation() {
+  if (inputLock.count > 0) return Promise.resolve(); // 已有动画进行中：忽略重复触发
+  inputLock.acquire();
+  const anims = [animateMatrixTo(IDENTITY_VALUES), controller.animateTo(DEFAULT_VIEW)];
+  return Promise.all(anims).then(() => inputLock.release());
+}
+
+// 按名称播放动画的唯一入口（后续 2D/3D 切换动画在此注册；也是 AI / MCP 的调用面）
+const PLAYABLE_ANIMATIONS = {
+  reset: playResetAnimation,
+};
+
+function playAnimation(name) {
+  const fn = PLAYABLE_ANIMATIONS[name];
+  if (!fn) return Promise.reject(new Error(`未知动画："${name}"`));
+  return fn();
 }
 
 buildMatrixUI();
-resetBtn.addEventListener('click', resetMatrix);
+resetBtn.addEventListener('click', () => playAnimation('reset'));
 
 /* ============================================================
    网格线显示开关
@@ -619,7 +771,6 @@ for (const input of document.querySelectorAll('input[data-grid-axis]')) {
 /* ============================================================
    控制台收缩：整个「线性变换控制台」可折叠为一个按钮
    ============================================================ */
-const consoleEl = document.querySelector('#console');
 const consoleToggle = document.querySelector('#console-toggle');
 
 consoleToggle.addEventListener('click', () => {
@@ -788,6 +939,7 @@ function animate(now) {
   requestAnimationFrame(animate);
   const delta = Math.min((now - clock.last) / 1000, 0.1); // 上限 0.1s，避免切回标签页时跳变
   clock.last = now;
+  animationManager.update(delta); // 动画先写参数，controller 再把参数落到相机
   controller.update(delta);
   renderer.render(scene, camera);
 }
@@ -808,4 +960,7 @@ window.__scene3d = {
   gridFamilies,
   setGridVisible,
   getMatrix: () => matrixValues.map((row) => row.slice()),
+  // 按名称播放动画（返回 Promise，供 AI / MCP 演示 await 串联）
+  playAnimation,
+  animationManager,
 };

@@ -156,6 +156,13 @@ body {
   display: none;
 }
 
+/* 动画播放中：控制台整体锁定（连折叠按钮一起禁用），轻微变暗示意 */
+#console.input-locked {
+  pointer-events: none;
+  opacity: 0.55;
+  transition: opacity 0.2s ease;
+}
+
 #console-card {
   width: 340px;
   padding: var(--space-22);

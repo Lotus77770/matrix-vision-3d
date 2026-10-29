@@ -6,6 +6,12 @@
 
 ## [Unreleased]
 
+### Added
+
+- 「重置为单位矩阵」过渡动画：矩阵数值逐帧插值归一（输入框数字随之滚动），相机插值球面参数沿弧线平滑飞回初始视角（theta 走最短角路径，飞行中段半径先拉远再落位），时长约 0.9 秒，参数集中在 `CONFIG.animation`
+- 动画播放期间输入全部锁定：相机控制停用并清空按住的移动键，控制台 UI（含折叠按钮）整体禁用并变暗，落位后自动恢复
+- 动画底座：`animationManager` 补间引擎（`run()` 返回 Promise）与 `playAnimation(name)` 统一动画入口，`window.__scene3d.playAnimation('reset')` 可在控制台或后续 AI MCP 演示中 await 串联
+
 ### Changed
 
 - 控制台面板默认收起为折叠按钮
@@ -22,6 +28,7 @@
 
 ### Fixed
 
+- `ViewController.update()` 中的 WASD 平移补上 `enabled` 检查，消除"输入锁定期间相机仍会被按住的移动键拖动"的隐患
 - 控制台小节展开 / 收起时滚动条出现 / 消失导致的左右缩放抖动（为 `#console-card` 启用 `scrollbar-gutter: stable`）
 - 输入框、按钮等 6 处 `font: … inherit` 简写按 CSS 规范无效（`inherit` 不能作字体族分量），导致字号 / 字体设置被整条丢弃；改为拆分出的 `font-family` / `font-size` / `line-height`
 - 删除向量时释放其独占的几何体与材质，修复反复增删向量的 GPU 资源泄漏
